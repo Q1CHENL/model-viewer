@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GLB Viewer (ThatOpen Components)</title>
+    <style>
+      html, body, #app { height: 100%; margin: 0; }
+      #toolbar {
+        position: absolute; z-index: 10; top: 12px; left: 12px;
+        background: rgba(30,30,30,0.7); padding: 8px 10px; border-radius: 6px;
+      }
+      #container { height: 100%; width: 100%; }
+      button { color: #fff; background: #6528D7; border: 0; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+      label { color:#fff; font: 12px sans-serif; margin-left:6px; }
+      #cull-config { display: inline-flex; align-items: center; gap: 6px; }
+      #cull-input-wrap { display: none; align-items: center; gap: 4px; }
+      #info-panel {
+        position: absolute; z-index: 10; top: 12px; right: 12px;
+        min-width: 220px; max-width: 320px;
+        background: rgba(30,30,30,0.7); padding: 10px 12px; border-radius: 6px;
+        color: #fff; font: 12px/1.4 sans-serif;
+      }
+      #info-panel h4 { margin: 0 0 6px 0; font: 600 13px/1.2 system-ui, sans-serif; }
+      #info-panel .row { display:flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
+      #info-panel .key { opacity: 0.8; }
+      #info-panel .val { text-align: right; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="toolbar">
+  <button id="open">Open .glb</button>
+	<button id="toggle-edges" data-active="false">Edges: Off</button>
+  <button id="toggle-adaptive" data-active="false">Adaptive Res: Off</button>
+  <button id="toggle-batching" data-active="true">Batching: On</button>
+  <span id="cull-config">
+    <button id="toggle-cull" data-active="true">Cull: On</button>
+    <span id="cull-input-wrap">
+      <label for="cull-threshold">Cull(px)</label>
+      <input id="cull-threshold" type="number" min="0" value="50" style="width:50px;" />
+    </span>
+  </span>
+        <input id="file" type="file" accept=".glb" style="display:none" />
+      </div>
+      <div id="info-panel" style="display:none;">
+        <h4>Selection</h4>
+        <div class="row"><span class="key">Name</span><span class="val" id="sel-name">-</span></div>
+        <div class="row"><span class="key">Type</span><span class="val" id="sel-type">-</span></div>
+        <div class="row"><span class="key">Verts</span><span class="val" id="sel-verts">-</span></div>
+        <div class="row"><span class="key">Tris</span><span class="val" id="sel-tris">-</span></div>
+      </div>
+      <div id="container"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
