@@ -96,12 +96,10 @@ if (thresholdInput) {
 // Remove damping / smoothing to reduce perceived orbit lag if controls expose it
 const ctrls: any = world.camera.controls as any;
 if (ctrls) {
-  if ('dampingFactor' in ctrls) ctrls.dampingFactor = 0;
-  if ('enableDamping' in ctrls) ctrls.enableDamping = false;
   if ('smoothTime' in ctrls) ctrls.smoothTime = 0;
   
   // Add this line to remove smoothing during the drag itself
-  if ('draggingSmoothTime' in ctrls) ctrls.draggingSmoothTime = 0;
+  if ('draggingSmoothTime' in ctrls) ctrls.draggingSmoothTime = 0.05;
 
   if ('dragInertia' in ctrls) ctrls.dragInertia = 0;
 }

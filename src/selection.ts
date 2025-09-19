@@ -25,8 +25,49 @@ export class SelectionController {
   private selVertsEl = document.getElementById('sel-verts') as HTMLElement | null;
   private selTrisEl = document.getElementById('sel-tris') as HTMLElement | null;
 
+  // Drag-aware click guard and deferred pick
+  private dragThresholdPx = 5;
+  private lastDownPos: { x: number; y: number } | null = null;
+  private isDrag = false;
+  private pendingPickRaf: number | null = null;
+
   private clickHandler = (e: MouseEvent) => {
-    this.pickAtClientPos(e.clientX, e.clientY);
+    if (this.pendingPickRaf !== null) {
+      cancelAnimationFrame(this.pendingPickRaf);
+      this.pendingPickRaf = null;
+    }
+    if (this.isDrag) {
+      // Ignore clicks that followed a drag
+      this.lastDownPos = null;
+      this.isDrag = false;
+      return;
+    }
+    const x = e.clientX;
+    const y = e.clientY;
+    // Defer pick to next rAF to avoid release-frame hitch
+    this.pendingPickRaf = requestAnimationFrame(() => {
+      this.pickAtClientPos(x, y);
+      this.pendingPickRaf = null;
+    });
+    this.lastDownPos = null;
+  };
+
+  private pointerDownHandler = (e: PointerEvent | MouseEvent) => {
+    this.lastDownPos = { x: e.clientX, y: e.clientY };
+    this.isDrag = false;
+  };
+
+  private pointerMoveHandler = (e: PointerEvent | MouseEvent) => {
+    if (!this.lastDownPos) return;
+    const dx = e.clientX - this.lastDownPos.x;
+    const dy = e.clientY - this.lastDownPos.y;
+    if (!this.isDrag && (dx * dx + dy * dy) > (this.dragThresholdPx * this.dragThresholdPx)) {
+      this.isDrag = true;
+    }
+  };
+
+  private pointerUpHandler = (_e: PointerEvent | MouseEvent) => {
+    // Keep state; click will decide whether to pick
   };
 
   constructor(params: SelectionControllerParams) {
@@ -36,11 +77,19 @@ export class SelectionController {
   }
 
   attach() {
-    this.world.renderer!.three.domElement.addEventListener('click', this.clickHandler);
+    const el = this.world.renderer!.three.domElement;
+    el.addEventListener('pointerdown', this.pointerDownHandler as any);
+    el.addEventListener('pointermove', this.pointerMoveHandler as any);
+    el.addEventListener('pointerup', this.pointerUpHandler as any);
+    el.addEventListener('click', this.clickHandler);
   }
 
   detach() {
-    this.world.renderer!.three.domElement.removeEventListener('click', this.clickHandler);
+    const el = this.world.renderer!.three.domElement;
+    el.removeEventListener('pointerdown', this.pointerDownHandler as any);
+    el.removeEventListener('pointermove', this.pointerMoveHandler as any);
+    el.removeEventListener('pointerup', this.pointerUpHandler as any);
+    el.removeEventListener('click', this.clickHandler);
   }
 
   clear() {
@@ -63,11 +112,8 @@ export class SelectionController {
     const hits: THREE.Intersection[] = [];
     const candidates: THREE.Object3D[] = [];
     this.scene.traverse(o => { if ((o as any).isMesh && (o as any).userData?.isUserModel) candidates.push(o); });
-    for (const obj of candidates) {
-      const mesh = obj as THREE.Mesh;
-      const res = this.raycaster.intersectObject(mesh, false);
-      if (res && res.length) hits.push(...res);
-    }
+    const res = this.raycaster.intersectObjects(candidates, false);
+    if (res && res.length) hits.push(...res);
     if (!hits.length) { this.setSelection(null); return; }
     hits.sort((a, b) => a.distance - b.distance);
     const top = hits[0];
