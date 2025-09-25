@@ -93,7 +93,7 @@ export class InteractionCullingController {
         meshPos.copy((mesh as THREE.Mesh).getWorldPosition(meshPos));
         const dist = meshPos.distanceTo(perspCam.position);
         if (dist > 0) {
-          const vHeight = 2 * Math.tan(perspCam.fov * Math.PI/180 / 2) * dist;
+          const vHeight = 2 * Math.tan(perspCam.fov * Math.PI / 180 / 2) * dist;
           projectedRadiusPx = (e.radius / vHeight) * height;
         }
       } else {

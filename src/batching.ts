@@ -33,8 +33,22 @@ const DEFAULT_OPTS: Required<BatchOptions> = {
   minDiagonalForBatch: 0.5
 };
 
+/** Ensure an index buffer exists for a geometry (without mutating the source). */
+function ensureIndexBuffer(geom: THREE.BufferGeometry): THREE.BufferAttribute | null {
+  const pos = geom.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!pos) return null;
+  const existing = geom.getIndex() as THREE.BufferAttribute | null;
+  if (existing) return existing;
+  const vertCount = pos.count;
+  const use32 = vertCount > 65535;
+  const IndexArray: any = use32 ? Uint32Array : Uint16Array;
+  const arr = new IndexArray(vertCount);
+  for (let i = 0; i < vertCount; i++) arr[i] = i;
+  return new THREE.BufferAttribute(arr, 1);
+}
+
 /**
- * Collect static meshes eligible for batching.
+ * Collect static meshes eligible for batching from a root object.
  * Criteria: has geometry, not skinned, not morphing, visible, single material.
  */
 function collectMeshes(root: THREE.Object3D, minDiagonal: number): MeshInfo[] {
@@ -49,8 +63,9 @@ function collectMeshes(root: THREE.Object3D, minDiagonal: number): MeshInfo[] {
     if ((geom as any).attributes?.skinIndex || (geom as any).attributes?.skinWeight) return;
     const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
     if (!mat || Array.isArray(mat)) return; // skip multi-material for now (simplifies index remap)
-    const index = geom.getIndex();
-    if (!index) return; // require indexed geometry to simplify merging
+    // Accept non-indexed by creating a trivial index
+    const index = ensureIndexBuffer(geom);
+    if (!index) return;
     // Compute world-space diagonal for size filtering
     const box = new THREE.Box3().setFromObject(mesh);
     if (!box.isEmpty()) {
@@ -94,9 +109,7 @@ function writeTransformed(
 }
 
 /** Merge meshes into batches per grouping key */
-export function batchMeshes(root: THREE.Object3D, opts: BatchOptions = {}): BatchingResult | null {
-  const options = { ...DEFAULT_OPTS, ...opts };
-  const collected = collectMeshes(root, options.minDiagonalForBatch);
+function doBatch(collected: MeshInfo[], options: Required<BatchOptions>, parent: THREE.Object3D): BatchingResult | null {
   if (collected.length === 0) return null;
 
   const groups = new Map<string, MeshInfo[]>();
@@ -116,7 +129,7 @@ export function batchMeshes(root: THREE.Object3D, opts: BatchOptions = {}): Batc
 
   groups.forEach(infos => {
     // Sort small to large to reduce early large buffers
-    infos.sort((a,b) => a.geom.getAttribute('position').count - b.geom.getAttribute('position').count);
+    infos.sort((a, b) => a.geom.getAttribute('position').count - b.geom.getAttribute('position').count);
 
     let currentVertices = 0;
 
@@ -131,8 +144,8 @@ export function batchMeshes(root: THREE.Object3D, opts: BatchOptions = {}): Batc
       const withUv = batchInfos.every(i => !!i.geom.getAttribute('uv'));
       const withUv2 = batchInfos.every(i => !!i.geom.getAttribute('uv2'));
       const withColor = batchInfos.every(i => !!i.geom.getAttribute('color'));
-      const totalVerts = batchInfos.reduce((s,i)=> s + (i.geom.getAttribute('position') as THREE.BufferAttribute).count, 0);
-      const totalIndices = batchInfos.reduce((s,i)=> s + i.index!.count, 0);
+      const totalVerts = batchInfos.reduce((s, i) => s + (i.geom.getAttribute('position') as THREE.BufferAttribute).count, 0);
+      const totalIndices = batchInfos.reduce((s, i) => s + i.index!.count, 0);
 
       const position = new Float32Array(totalVerts * 3);
       const normals = withNormals ? new Float32Array(totalVerts * 3) : null;
@@ -264,7 +277,7 @@ export function batchMeshes(root: THREE.Object3D, opts: BatchOptions = {}): Batc
       (mergedMesh as any).userData.isUserModel = true;
       (mergedMesh as any).userData.isMergedBatch = true;
       (mergedMesh as any).userData.mergedRanges = batchRanges;
-      root.add(mergedMesh);
+      parent.add(mergedMesh);
       mergedMeshes.push(mergedMesh);
       batchInfos = [];
       currentVertices = 0;
@@ -283,6 +296,37 @@ export function batchMeshes(root: THREE.Object3D, opts: BatchOptions = {}): Batc
   });
 
   return { mergedMeshes, ranges };
+}
+
+export function batchMeshes(root: THREE.Object3D, opts: BatchOptions = {}): BatchingResult | null {
+  const options = { ...DEFAULT_OPTS, ...opts };
+  const collected = collectMeshes(root, options.minDiagonalForBatch);
+  return doBatch(collected, options, root);
+}
+
+/** Batch from an explicit list of original meshes, adding merged meshes to targetParent without reparenting originals. */
+export function batchMeshesFromList(meshes: THREE.Mesh[], targetParent: THREE.Object3D, opts: BatchOptions = {}): BatchingResult | null {
+  const options = { ...DEFAULT_OPTS, ...opts } as Required<BatchOptions>;
+  const list: MeshInfo[] = [];
+  const box = new THREE.Box3();
+  for (const mesh of meshes) {
+    if (!mesh || !(mesh as any).isMesh) continue;
+    if (!mesh.visible) continue;
+    const geom = mesh.geometry as THREE.BufferGeometry | undefined;
+    if (!geom) continue;
+    if ((geom as any).attributes?.skinIndex || (geom as any).attributes?.skinWeight) continue;
+    const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+    if (!mat || Array.isArray(mat)) continue;
+    const index = ensureIndexBuffer(geom);
+    if (!index) continue;
+    box.setFromObject(mesh);
+    if (!box.isEmpty()) {
+      const diag = box.getSize(new THREE.Vector3()).length();
+      if (diag < options.minDiagonalForBatch) continue;
+    }
+    list.push({ mesh, geom, material: mat, index });
+  }
+  return doBatch(list, options, targetParent);
 }
 
 /** Undo function to restore originals (makes their meshes visible and disposes merged) */

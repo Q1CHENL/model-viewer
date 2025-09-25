@@ -18,6 +18,7 @@ export class SelectionController {
   private selectionOverlay: THREE.Mesh | null = null;
   private selectionParent: THREE.Mesh | null = null;
   private selectionBaseGeomUuid: string | null = null;
+  private selectionEdgeOverlay: THREE.LineSegments | null = null;
 
   private pickInfoPanel = document.getElementById('info-panel') as HTMLElement | null;
   private selNameEl = document.getElementById('sel-name') as HTMLElement | null;
@@ -74,6 +75,8 @@ export class SelectionController {
     this.world = params.world;
     this.scene = params.scene;
     this.selectionColor = params.selectionColor ?? 0x00D5B9;
+    // React to global edges toggle to rebuild selection outline if needed
+    window.addEventListener('viewer:edgesToggled', this.handleEdgesToggle as any);
   }
 
   attach() {
@@ -90,6 +93,7 @@ export class SelectionController {
     el.removeEventListener('pointermove', this.pointerMoveHandler as any);
     el.removeEventListener('pointerup', this.pointerUpHandler as any);
     el.removeEventListener('click', this.clickHandler);
+    window.removeEventListener('viewer:edgesToggled', this.handleEdgesToggle as any);
   }
 
   clear() {
@@ -143,6 +147,13 @@ export class SelectionController {
     if (this.selectionOverlay && this.selectionParent) {
       this.selectionParent.remove(this.selectionOverlay);
     }
+    if (this.selectionEdgeOverlay) {
+      this.selectionEdgeOverlay.parent?.remove(this.selectionEdgeOverlay);
+      const mat = this.selectionEdgeOverlay.material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(mat)) mat.forEach(m => m.dispose?.());
+      else mat?.dispose?.();
+      this.selectionEdgeOverlay = null;
+    }
     this.selectionOverlay = null;
     this.selectionParent = null;
     this.selectionBaseGeomUuid = null;
@@ -178,6 +189,7 @@ export class SelectionController {
     if (!baseIndex) {
       (this.selectionOverlay.geometry as THREE.BufferGeometry).setIndex(null);
       (this.selectionOverlay as any).visible = true;
+      this.updateSelectionEdgeFromOverlay();
       return;
     }
     const Ctor: any = (baseIndex.array as any).constructor;
@@ -186,6 +198,7 @@ export class SelectionController {
     arr.set(sub);
     (this.selectionOverlay.geometry as THREE.BufferGeometry).setIndex(new THREE.BufferAttribute(arr, 1));
     (this.selectionOverlay as any).visible = true;
+    this.updateSelectionEdgeFromOverlay();
   }
 
   private showSelectionForOriginal(original: THREE.Mesh) {
@@ -204,6 +217,7 @@ export class SelectionController {
     else {
       (this.selectionOverlay!.geometry as THREE.BufferGeometry).setIndex(null);
       (this.selectionOverlay as any).visible = true;
+      this.updateSelectionEdgeFromOverlay();
     }
     this.updateInfoPanel(original);
   }
@@ -233,4 +247,46 @@ export class SelectionController {
     });
     return result;
   }
+
+  private updateSelectionEdgeFromOverlay() {
+    if (!this.selectionOverlay) return;
+    // Only show selection edge when global edges are ON
+    const edgesOn = !!((this.scene as any).userData && (this.scene as any).userData.edgesEnabled === true);
+    if (!edgesOn) {
+      if (this.selectionEdgeOverlay) {
+        this.selectionEdgeOverlay.parent?.remove(this.selectionEdgeOverlay);
+        const mat = this.selectionEdgeOverlay.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(mat)) mat.forEach(m => m.dispose?.());
+        else mat?.dispose?.();
+        this.selectionEdgeOverlay = null;
+      }
+      return;
+    }
+    // Remove previous edge overlay
+    if (this.selectionEdgeOverlay) {
+      this.selectionEdgeOverlay.parent?.remove(this.selectionEdgeOverlay);
+      const mat = this.selectionEdgeOverlay.material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(mat)) mat.forEach(m => m.dispose?.());
+      else mat?.dispose?.();
+      this.selectionEdgeOverlay = null;
+    }
+    const geom = (this.selectionOverlay.geometry as THREE.BufferGeometry);
+    const egeom = new THREE.EdgesGeometry(geom, 25); // moderate threshold to avoid coplanar clutter
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x4F92E0 });
+    // Ensure outline renders above the filled selection overlay
+    lineMat.depthTest = false;
+    lineMat.depthWrite = false;
+    const lines = new THREE.LineSegments(egeom, lineMat);
+    (lines as any).userData.isSelectionEdgeOverlay = true;
+    lines.renderOrder = 10;
+    this.selectionOverlay.add(lines);
+    this.selectionEdgeOverlay = lines;
+  }
+
+  private handleEdgesToggle = () => {
+    // Re-evaluate current selection to ensure edge visibility matches edges toggle
+    if (!this.selectionOverlay) return;
+    // Trigger a rebuild/hide of selection edge based on new state
+    this.updateSelectionEdgeFromOverlay();
+  };
 }
