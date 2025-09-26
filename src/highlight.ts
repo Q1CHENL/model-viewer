@@ -1,17 +1,40 @@
 import * as THREE from 'three';
 import type { BatchingResult } from './batching';
 
+interface HighlightOverlay {
+  mesh: THREE.Mesh;
+  material: THREE.MeshBasicMaterial;
+  parentMesh: THREE.Mesh;
+}
+
+
 export class HighlightController {
   private textHighlightActive = false;
   private currentSearchText = '';
-  private originalMaterials = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
-  private highlightMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8 });
+  private highlightOverlays: HighlightOverlay[] = [];
+  private highlightMaterial = new THREE.MeshBasicMaterial({ 
+    color: 0xff0000, 
+    transparent: true, 
+    opacity: 0.8,
+    depthTest: true,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1
+  });
+
+  private scene: THREE.Scene;
+  private getCurrentBatching: () => BatchingResult | null;
+  private isBatchingEnabled: () => boolean;
 
   constructor(
-    private scene: THREE.Scene,
-    private getCurrentBatching: () => BatchingResult | null,
-    private isBatchingEnabled: () => boolean
-  ) {}
+    scene: THREE.Scene,
+    getCurrentBatching: () => BatchingResult | null,
+    isBatchingEnabled: () => boolean
+  ) {
+    this.scene = scene;
+    this.getCurrentBatching = getCurrentBatching;
+    this.isBatchingEnabled = isBatchingEnabled;
+  }
 
   highlightTextMeshes(enable: boolean, searchText: string) {
     this.textHighlightActive = enable;
@@ -22,6 +45,9 @@ export class HighlightController {
     } else {
       this.removeTextHighlighting();
     }
+    
+    // Notify that highlighting state changed for stats update
+    window.dispatchEvent(new CustomEvent('viewer:highlightChanged'));
   }
 
   isTextHighlightActive(): boolean {
@@ -30,6 +56,10 @@ export class HighlightController {
 
   getCurrentSearchText(): string {
     return this.currentSearchText;
+  }
+
+  getHighlightedCount(): number {
+    return this.highlightOverlays.length;
   }
 
   // Called when batching state changes to preserve highlighting
@@ -62,16 +92,32 @@ export class HighlightController {
     const currentBatching = this.getCurrentBatching();
     if (!currentBatching) return;
 
-    // For batched meshes, we need to make the original matching meshes visible and highlight them individually
+    // Group ranges by merged mesh for overlay creation
+    const mergedMeshRanges = new Map<THREE.Mesh, Array<{start: number, count: number, original: THREE.Mesh}>>();
+
     for (const range of currentBatching.ranges) {
       const originalMesh = range.original;
       if (this.meshContainsText(originalMesh, this.currentSearchText)) {
-        // Make the original mesh visible and highlight it
-        originalMesh.visible = true;
-        this.highlightMesh(originalMesh);
-        
-        // Store reference for cleanup
-        (originalMesh as any).userData.wasHighlightedText = true;
+        // Find the merged mesh containing this range
+        const mergedMesh = this.findMergedMeshContainingRange(range, currentBatching);
+        if (mergedMesh) {
+          // Add range for overlay creation
+          if (!mergedMeshRanges.has(mergedMesh)) {
+            mergedMeshRanges.set(mergedMesh, []);
+          }
+          mergedMeshRanges.get(mergedMesh)!.push({
+            start: range.start,
+            count: range.count,
+            original: originalMesh
+          });
+        }
+      }
+    }
+
+    // Create highlight overlays for each range
+    for (const [mergedMesh, ranges] of mergedMeshRanges) {
+      for (const range of ranges) {
+        this.createHighlightOverlay(mergedMesh, range.start, range.count, range.original);
       }
     }
   }
@@ -85,7 +131,7 @@ export class HighlightController {
       if ((mesh as any).userData?.isEdgeOverlay) return;
 
       if (this.meshContainsText(mesh, this.currentSearchText)) {
-        this.highlightMesh(mesh);
+        this.createHighlightOverlayForMesh(mesh);
       }
     });
   }
@@ -109,33 +155,90 @@ export class HighlightController {
     return false;
   }
 
-  private highlightMesh(mesh: THREE.Mesh) {
-    if (!mesh.material) return;
+  private createHighlightOverlay(mergedMesh: THREE.Mesh, indexStart: number, indexCount: number, originalMesh: THREE.Mesh) {
+    const geometry = mergedMesh.geometry as THREE.BufferGeometry;
     
-    // Store original material if not already stored
-    if (!this.originalMaterials.has(mesh)) {
-      this.originalMaterials.set(mesh, mesh.material);
+    // Create overlay geometry
+    const overlayGeom = new THREE.BufferGeometry();
+    overlayGeom.setAttribute('position', geometry.getAttribute('position'));
+    
+    // Set index range for this specific highlight
+    const baseIndex = geometry.getIndex() as THREE.BufferAttribute;
+    if (baseIndex) {
+      const Ctor: any = (baseIndex.array as any).constructor;
+      const sub = (baseIndex.array as any).subarray(indexStart, indexStart + indexCount);
+      const arr = new Ctor(indexCount);
+      arr.set(sub);
+      overlayGeom.setIndex(new THREE.BufferAttribute(arr, 1));
     }
     
-    // Apply highlight material
-    mesh.material = this.highlightMaterial;
+    // Create highlight overlay mesh
+    const overlayMesh = new THREE.Mesh(overlayGeom, this.highlightMaterial.clone());
+    (overlayMesh as any).userData.isHighlightOverlay = true;
+    (overlayMesh as any).userData.originalMesh = originalMesh;
+    overlayMesh.renderOrder = 2;
+    
+    // Add to merged mesh
+    mergedMesh.add(overlayMesh);
+    
+    // Track for cleanup
+    this.highlightOverlays.push({
+      mesh: overlayMesh,
+      material: overlayMesh.material as THREE.MeshBasicMaterial,
+      parentMesh: mergedMesh
+    });
+  }
+
+  private createHighlightOverlayForMesh(mesh: THREE.Mesh) {
+    const geometry = mesh.geometry as THREE.BufferGeometry;
+    
+    // Create overlay geometry
+    const overlayGeom = new THREE.BufferGeometry();
+    overlayGeom.setAttribute('position', geometry.getAttribute('position'));
+    
+    // Copy index if it exists
+    const baseIndex = geometry.getIndex();
+    if (baseIndex) {
+      overlayGeom.setIndex(baseIndex);
+    }
+    
+    // Create highlight overlay mesh
+    const overlayMesh = new THREE.Mesh(overlayGeom, this.highlightMaterial.clone());
+    (overlayMesh as any).userData.isHighlightOverlay = true;
+    (overlayMesh as any).userData.originalMesh = mesh;
+    overlayMesh.renderOrder = 2;
+    
+    // Add to original mesh
+    mesh.add(overlayMesh);
+    
+    // Track for cleanup
+    this.highlightOverlays.push({
+      mesh: overlayMesh,
+      material: overlayMesh.material as THREE.MeshBasicMaterial,
+      parentMesh: mesh
+    });
   }
 
   private removeTextHighlighting() {
-    // Restore original materials
-    for (const [mesh, originalMaterial] of this.originalMaterials) {
-      if (mesh.material === this.highlightMaterial) {
-        mesh.material = originalMaterial;
-      }
-      
-      // If this was a batched original mesh that we made visible, hide it again
-      if ((mesh as any).userData?.wasHighlightedText && (mesh as any).userData?.isBatchedOriginal) {
-        mesh.visible = false;
-        delete (mesh as any).userData.wasHighlightedText;
+    // Remove all highlight overlays
+    for (const overlay of this.highlightOverlays) {
+      overlay.parentMesh.remove(overlay.mesh);
+      overlay.material.dispose();
+      overlay.mesh.geometry.dispose();
+    }
+    this.highlightOverlays = [];
+  }
+
+  private findMergedMeshContainingRange(targetRange: any, batching: BatchingResult): THREE.Mesh | null {
+    for (const mergedMesh of batching.mergedMeshes) {
+      const ranges = (mergedMesh as any).userData?.mergedRanges;
+      if (ranges && ranges.includes(targetRange)) {
+        return mergedMesh;
       }
     }
-    this.originalMaterials.clear();
+    return null;
   }
+
 }
 
 // UI installation function
@@ -146,6 +249,16 @@ export function installHighlightUI(
   const searchInput = document.getElementById('search-text') as HTMLInputElement;
   
   if (!highlightButton || !searchInput) return;
+  
+  // Reset UI when new model loads
+  const resetHighlightUI = () => {
+    highlightButton.setAttribute('data-active', 'false');
+    highlightButton.textContent = 'Highlight';
+    searchInput.style.display = 'none';
+  };
+  
+  // Listen for model load events to reset UI
+  window.addEventListener('viewer:modelLoaded', resetHighlightUI);
 
   const toggleHighlight = () => {
     const isActive = highlightController.isTextHighlightActive();

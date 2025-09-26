@@ -16,6 +16,7 @@ const batchesBtn = document.getElementById('stat-batches-btn') as HTMLButtonElem
 const batchesPanel = document.getElementById('batch-details') as HTMLElement | null;
 const edgesBanner = document.getElementById('edges-banner') as HTMLElement | null;
 const unbatchedEl = document.getElementById('stat-unbatched') as HTMLElement | null;
+const highlightedEl = document.getElementById('stat-highlighted') as HTMLElement | null;
 function updateStats() {
   if (!meshesEl) return;
   const s = viewer.getStats();
@@ -24,6 +25,7 @@ function updateStats() {
   if (batchesBtn) batchesBtn.textContent = bText; else if (batchesEl) batchesEl.textContent = bText;
   if (materialsEl) materialsEl.textContent = String(s.uniqueMaterials);
   if (unbatchedEl) unbatchedEl.textContent = String(s.unbatchedOriginals);
+  if (highlightedEl) highlightedEl.textContent = String(viewer.getHighlightedCount());
 }
 
 // File open
@@ -176,4 +178,9 @@ window.addEventListener('viewer:edgesBuilt', (e: any) => {
   const ms = e?.detail?.ms as number | undefined;
   if (typeof ms === 'number' && edgesSecEl) edgesSecEl.textContent = (ms / 1000).toFixed(2);
   if (edgesBanner) edgesBanner.style.display = 'none';
+});
+
+// Listen for highlight changes to update stats
+window.addEventListener('viewer:highlightChanged', () => {
+  updateStats();
 });

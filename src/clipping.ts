@@ -80,7 +80,7 @@ export function installClippingUI(viewer: Viewer) {
     viewer.setSelectionEnabled(!active);
   }
 
-  clipWrap.addEventListener('mouseenter', () => { if (!clipActive && clipMenu) clipMenu.style.display = 'block'; });
+  clipWrap.addEventListener('mouseenter', () => { if (clipMenu) clipMenu.style.display = 'block'; });
   clipWrap.addEventListener('mouseleave', () => { if (clipMenu) clipMenu.style.display = 'none'; });
   (clipBtn as HTMLButtonElement).addEventListener('click', () => {
     if (clipActive) {

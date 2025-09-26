@@ -157,6 +157,13 @@ export class Viewer {
       this.clipperCtrl.scaleSizeToUserModels(this.scene);
 
       if (this.edgesEnabled) this.addEdgesForCurrentModel();
+      
+      // Disable highlighting by default for new model
+      this.highlightCtrl.highlightTextMeshes(false, '');
+      
+      // Notify that a new model was loaded
+      window.dispatchEvent(new CustomEvent('viewer:modelLoaded'));
+      
       this.fitCameraToObject(root);
     } finally {
       URL.revokeObjectURL(url);
@@ -536,6 +543,10 @@ export class Viewer {
 
   getHighlightController(): HighlightController {
     return this.highlightCtrl;
+  }
+
+  getHighlightedCount(): number {
+    return this.highlightCtrl.getHighlightedCount();
   }
 }
 
