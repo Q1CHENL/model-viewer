@@ -62,15 +62,61 @@ installEdgesUI(viewer);
 
 // Batching toggle button logic
 const batchingBtn = document.getElementById('toggle-batching');
-if (batchingBtn) {
+const batchVerticesInput = document.getElementById('batch-vertices') as HTMLInputElement | null;
+const batchInputWrap = document.getElementById('batch-input-wrap') as HTMLElement | null;
+
+if (batchingBtn && batchInputWrap) {
+  const setBatchingUI = (enabled: boolean) => {
+    batchingBtn.setAttribute('data-active', enabled ? 'true' : 'false');
+    batchingBtn.textContent = `Batching: ${enabled ? 'On' : 'Off'}`;
+    batchInputWrap.style.display = enabled ? 'inline-flex' : 'none';
+    viewer.setBatchingEnabled(enabled);
+  };
+
+  // Initialize with current state (batching is on by default)
+  setBatchingUI(viewer.isBatchingEnabled());
+
   batchingBtn.addEventListener('click', () => {
-    const next = !viewer.isBatchingEnabled();
-    viewer.setBatchingEnabled(next);
-    batchingBtn.setAttribute('data-active', next ? 'true' : 'false');
-    batchingBtn.textContent = `Batching: ${next ? 'On' : 'Off'}`;
+    setBatchingUI(!viewer.isBatchingEnabled());
     updateStats();
     refreshBatchDetailsIfOpen();
   });
+}
+
+// Bind batch vertices input
+if (batchVerticesInput) {
+  const applyBatchVertices = () => {
+    const v = parseInt(batchVerticesInput.value);
+    if (!isNaN(v) && v >= 100 && v <= 100000) {
+      viewer.setMaxVerticesPerBatch(v);
+    }
+  };
+
+  const rebuildBatchingIfEnabled = () => {
+    const v = parseInt(batchVerticesInput.value);
+    if (!isNaN(v) && v >= 100 && v <= 100000) {
+      viewer.setMaxVerticesPerBatch(v);
+
+      // Only rebuild if batching is currently enabled
+      if (viewer.isBatchingEnabled()) {
+        viewer.rebuildBatching();
+        updateStats();
+        refreshBatchDetailsIfOpen();
+      }
+    }
+  };
+
+  // Update setting on change, don't rebuild
+  batchVerticesInput.addEventListener('change', applyBatchVertices);
+
+  // Rebuild on Enter key press (only if batching is enabled)
+  batchVerticesInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      rebuildBatchingIfEnabled();
+    }
+  });
+
+  batchVerticesInput.value = String(viewer.getMaxVerticesPerBatch());
 }
 
 // Culling toggle and UI show/hide
@@ -158,7 +204,7 @@ function renderBatchDetails() {
   const details = viewer.getBatchDetails();
   const parts: string[] = [];
   for (let i = 0; i < details.length; i++) {
-    parts.push(`<div class="bd-row"><span class="key">Batch ${i+1}</span><span class="val">${details[i].originalCount}</span></div>`);
+    parts.push(`<div class="bd-row"><span class="key">Batch ${i + 1}</span><span class="val">${details[i].originalCount}</span></div>`);
   }
   batchesPanel.innerHTML = parts.join('');
 }

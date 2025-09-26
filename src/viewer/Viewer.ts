@@ -44,6 +44,7 @@ export class Viewer {
   // Batching
   private batchingEnabled = true;
   private currentBatching: BatchingResult | null = null;
+  private maxVerticesPerBatch = 2000;
 
   // RAF loop
   private rafId: number | null = null;
@@ -145,7 +146,10 @@ export class Viewer {
 
       if (this.batchingEnabled) {
         const allow32 = this.supportsUint32Indices();
-        this.currentBatching = batchMeshes(root, { allow32Bit: allow32 }) || null;
+        this.currentBatching = batchMeshes(root, {
+          allow32Bit: allow32,
+          maxVerticesPerBatch: this.maxVerticesPerBatch
+        }) || null;
       }
       this.cullingCtrl.register(root);
 
@@ -157,13 +161,13 @@ export class Viewer {
       this.clipperCtrl.scaleSizeToUserModels(this.scene);
 
       if (this.edgesEnabled) this.addEdgesForCurrentModel();
-      
+
       // Disable highlighting by default for new model
       this.highlightCtrl.highlightTextMeshes(false, '');
-      
+
       // Notify that a new model was loaded
       window.dispatchEvent(new CustomEvent('viewer:modelLoaded'));
-      
+
       this.fitCameraToObject(root);
     } finally {
       URL.revokeObjectURL(url);
@@ -259,7 +263,10 @@ export class Viewer {
           candidates.push(m);
         }
       });
-      const result = batchMeshesFromList(candidates, this.scene, { allow32Bit: allow32 });
+      const result = batchMeshesFromList(candidates, this.scene, {
+        allow32Bit: allow32,
+        maxVerticesPerBatch: this.maxVerticesPerBatch
+      });
       if (result) {
         this.currentBatching = result;
       }
@@ -547,6 +554,59 @@ export class Viewer {
 
   getHighlightedCount(): number {
     return this.highlightCtrl.getHighlightedCount();
+  }
+
+  setMaxVerticesPerBatch(value: number) {
+    this.maxVerticesPerBatch = Math.max(100, Math.min(100000, value)); // 100 to 100,000 vertices
+  }
+
+  getMaxVerticesPerBatch(): number {
+    return this.maxVerticesPerBatch;
+  }
+
+  rebuildBatching() {
+    if (!this.batchingEnabled || !this.currentBatching) return;
+
+    // Store current batching state
+    const wasEnabled = this.batchingEnabled;
+
+    // Clear current batching
+    if (this.currentBatching) {
+      unbatch(this.currentBatching);
+      this.currentBatching = null;
+    }
+
+    // Rebuild with new settings
+    if (wasEnabled) {
+      const allow32 = this.supportsUint32Indices();
+      const candidates: THREE.Mesh[] = [];
+      this.scene.traverse(o => {
+        const m = o as THREE.Mesh;
+        if ((m as any).isMesh && (m as any).userData?.isUserModel && !(m as any).userData.isMergedBatch && !(m as any).userData.isEdgeOverlay) {
+          candidates.push(m);
+        }
+      });
+
+      const result = batchMeshesFromList(candidates, this.scene, {
+        allow32Bit: allow32,
+        maxVerticesPerBatch: this.maxVerticesPerBatch
+      });
+
+      if (result) {
+        this.currentBatching = result;
+      }
+
+      // Rebuild edges if enabled
+      if (this.edgesEnabled) {
+        this.removeAllEdgeOverlays();
+        this.addEdgesForCurrentModel();
+      }
+
+      // Refresh highlighting if active
+      if (this.highlightCtrl.isTextHighlightActive()) {
+        this.highlightCtrl.refreshHighlighting();
+      }
+    }
   }
 }
 
