@@ -1,6 +1,7 @@
 import { Viewer } from './viewer/Viewer';
 import { installClippingUI } from './clipping';
 import { installEdgesUI } from './edges';
+import { installHighlightUI } from './highlight';
 
 const container = document.getElementById('container')!;
 const viewer = new Viewer(container);
@@ -138,6 +139,9 @@ if (adaptiveBtn) {
 
 // Clipping controls
 installClippingUI(viewer);
+
+// Highlighting controls
+installHighlightUI(viewer.getHighlightController());
 
 updateStats();
 

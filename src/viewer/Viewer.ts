@@ -6,6 +6,7 @@ import { batchMeshes, batchMeshesFromList, unbatch, type BatchingResult } from '
 import { AdaptiveResolutionController } from '../adaptiveRes';
 import { InteractionCullingController } from '../culling';
 import { SelectionController } from '../selection';
+import { HighlightController } from '../highlight';
 
 export interface ViewerStats {
   originalMeshes: number;
@@ -30,6 +31,7 @@ export class Viewer {
   private selection: SelectionController;
   private adaptiveRes: AdaptiveResolutionController;
   private cullingCtrl: InteractionCullingController;
+  private highlightCtrl: HighlightController;
 
   // Edges overlay state
   private edgesEnabled = false;
@@ -86,6 +88,11 @@ export class Viewer {
     this.cullingCtrl = new InteractionCullingController(this.world.camera, this.world.renderer);
     this.selection = new SelectionController({ world: { camera: this.world.camera, renderer: this.world.renderer }, scene: this.world.scene.three as unknown as THREE.Scene, selectionColor: 0x00D5B9 });
     this.selection.attach();
+    this.highlightCtrl = new HighlightController(
+      this.scene,
+      () => this.currentBatching,
+      () => this.batchingEnabled
+    );
 
     // Global interactions for adaptive resolution
     window.addEventListener('pointerdown', this.onPointerDown, { passive: true });
@@ -113,6 +120,7 @@ export class Viewer {
     this.selection.detach();
     this.adaptiveRes.dispose();
     this.cullingCtrl.dispose();
+    this.highlightCtrl.dispose();
     // Dispose clipping planes and related resources
     if (this.clipperCtrl) this.clipperCtrl.dispose();
     this.clearPreviousModel();
@@ -225,6 +233,10 @@ export class Viewer {
   setBatchingEnabled(enabled: boolean) {
     this.batchingEnabled = enabled;
 
+    // If text highlighting is active, temporarily disable it during batching changes
+    const wasTextActive = this.highlightCtrl.isTextHighlightActive();
+    const searchText = this.highlightCtrl.getCurrentSearchText();
+
     if (this.currentBatching) {
       unbatch(this.currentBatching);
       this.currentBatching = null;
@@ -256,6 +268,11 @@ export class Viewer {
     const userRoot = new THREE.Group();
     this.scene.traverse(o => { if ((o as any).userData?.isUserModel) userRoot.add(o); });
     this.cullingCtrl.register(userRoot);
+
+    // Re-apply text highlighting if it was active
+    if (wasTextActive && searchText) {
+      this.highlightCtrl.highlightTextMeshes(true, searchText);
+    }
   }
 
   isBatchingEnabled() { return this.batchingEnabled; }
@@ -507,6 +524,19 @@ export class Viewer {
   onClipAfterDrag(_handler: () => void) { }
 
   setSelectionEnabled(state: boolean) { this.selection.setEnabled(state); }
+
+  // Highlight controller public API
+  highlightTextMeshes(enable: boolean, searchText: string) {
+    this.highlightCtrl.highlightTextMeshes(enable, searchText);
+  }
+
+  isTextHighlightActive(): boolean {
+    return this.highlightCtrl.isTextHighlightActive();
+  }
+
+  getHighlightController(): HighlightController {
+    return this.highlightCtrl;
+  }
 }
 
 

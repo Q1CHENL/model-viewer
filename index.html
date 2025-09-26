@@ -89,6 +89,26 @@
       width: 72px;
     }
 
+    #highlight-config {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #search-text {
+      width: 80px;
+      padding: 4px 6px;
+      border: 1px solid #666;
+      border-radius: 4px;
+      background: rgba(50, 50, 50, 0.9);
+      color: #fff;
+      font: 12px sans-serif;
+    }
+
+    #search-text::placeholder {
+      color: #aaa;
+    }
+
     #clip-config {
       position: relative;
       display: inline-block;
@@ -226,6 +246,10 @@
       <button id="toggle-edges" data-active="false">Edges: Off</button>
       <button id="toggle-adaptive" data-active="false">Adaptive Res: Off</button>
       <button id="toggle-batching" data-active="true">Batching: On</button>
+      <span id="highlight-config">
+        <button id="highlight-search" data-active="false">Highlight</button>
+        <input id="search-text" type="text" placeholder="Search text..." value="000" style="display: none;" />
+      </span>
       <span id="clip-config">
         <button id="clip-btn" data-active="false">Clip</button>
         <div id="clip-menu">
