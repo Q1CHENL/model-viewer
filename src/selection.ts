@@ -33,6 +33,7 @@ export class SelectionController {
   private pendingPickRaf: number | null = null;
 
   private clickHandler = (e: MouseEvent) => {
+    const t0 = performance.now();
     if (this.pendingPickRaf !== null) {
       cancelAnimationFrame(this.pendingPickRaf);
       this.pendingPickRaf = null;
@@ -48,6 +49,8 @@ export class SelectionController {
     // Defer pick to next rAF to avoid release-frame hitch
     this.pendingPickRaf = requestAnimationFrame(() => {
       this.pickAtClientPos(x, y);
+      const dt = performance.now() - t0;
+      this.showPickTiming(dt);
       this.pendingPickRaf = null;
     });
     this.lastDownPos = null;
@@ -289,4 +292,16 @@ export class SelectionController {
     // Trigger a rebuild/hide of selection edge based on new state
     this.updateSelectionEdgeFromOverlay();
   };
+
+  private showPickTiming(ms: number) {
+    const el = document.getElementById('pick-banner') as HTMLElement | null;
+    if (!el) return;
+    el.textContent = `Picked in : ${ms.toFixed(1)} ms`;
+    el.style.display = 'block';
+    // Hide after a short delay
+    // window.clearTimeout((el as any)._pickTimer);
+    // (el as any)._pickTimer = window.setTimeout(() => {
+    //   el.style.display = 'none';
+    // }, 500);
+  }
 }
