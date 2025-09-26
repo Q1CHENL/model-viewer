@@ -1,103 +1,276 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>GLB Viewer (ThatOpen Components)</title>
-    <style nonce="dev">
-      html, body, #app { height: 100%; margin: 0; }
-      #toolbar {
-        position: absolute; z-index: 10; top: 12px; left: 12px;
-        background: rgba(30,30,30,0.7); padding: 8px 10px; border-radius: 6px;
-      }
-      #container { height: 100%; width: 100%; }
-      button { color: #fff; background: #6528D7; border: 0; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
-      #toolbar button[data-active="false"] { background: #4a4a4a; color: #ddd; }
-      #toolbar button[data-active="true"] { background: #6528D7; color: #fff; }
-      label { color:#fff; font: 12px sans-serif; margin-left:6px; }
-      #cull-config { display: inline-flex; align-items: center; gap: 6px; }
-      #cull-input-wrap { display: none; align-items: center; gap: 4px; }
-      #cull-threshold { width: 50px; }
-      #drag-config { display: inline-flex; align-items: center; gap: 4px; }
-      #drag-config input { width: 72px; }
-      #zoom-config { display: inline-flex; align-items: center; gap: 4px; }
-      #zoom-config input { width: 72px; }
-      #info-panel {
-        position: absolute; z-index: 10; top: 12px; right: 12px;
-        min-width: 260px; max-width: 400px;
-        background: rgba(30,30,30,0.7); padding: 12px 14px; border-radius: 6px;
-        color: #fff; font: 14px/1.45 sans-serif;
-      }
-      #info-panel { display: none; }
-      #info-panel h4 { margin: 0 0 8px 0; font: 600 15px/1.2 system-ui, sans-serif; }
-      #info-panel .row { display:flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
-      #info-panel .key { opacity: 0.8; }
-      #info-panel .val { text-align: right; }
-      #stats-panel {
-        position: absolute; z-index: 10; left: 12px; bottom: 12px;
-        min-width: 210px; background: rgba(30,30,30,0.7); padding: 10px 12px; border-radius: 6px;
-        color: #fff; font: 14px/1.45 sans-serif;
-      }
-      #stats-panel .row { display:flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
-      #batch-details { display:none; margin-top:6px; max-height: 200px; overflow:auto; }
-      #batch-details .bd-row { display:flex; justify-content: space-between; gap: 8px; margin: 1px 0; }
-      #edges-banner {
-        position: absolute; z-index: 20; top: 12px; left: 50%; transform: translateX(-50%);
-        background: rgba(30,30,30,0.85); color:#fff; font: 14px/1.4 sans-serif; padding: 6px 10px; border-radius: 6px;
-        display: none;
-      }
-      #pick-banner {
-        position: absolute; z-index: 20; top: 12px; left: 50%; transform: translateX(-50%);
-        background: rgba(30,30,30,0.85); color:#fff; font: 14px/1.4 sans-serif; padding: 6px 10px; border-radius: 6px;
-        display: none;
-      }
-      #file { display: none; }
-    </style>
-  </head>
-  <body>
-    <div id="app">
-      <div id="edges-banner">Adding edges…</div>
-      <div id="pick-banner"></div>
-      <div id="toolbar">
-  <button id="open">Open .glb</button>
-	<button id="toggle-edges" data-active="false">Edges: Off</button>
-  <button id="toggle-adaptive" data-active="false">Adaptive Res: Off</button>
-  <button id="toggle-batching" data-active="true">Batching: On</button>
-  <span id="cull-config">
-    <button id="toggle-cull" data-active="true">Cull: On</button>
-    <span id="cull-input-wrap">
-      <label for="cull-threshold">Cull(px)</label>
-      <input id="cull-threshold" type="number" min="0" value="50" />
-    </span>
-  </span>
-  <span id="drag-config">
-    <label for="drag-smooth">Drag delay</label>
-    <input id="drag-smooth" type="number" min="0" step="0.01" value="0.05" placeholder="Max: 0.5" />
-  </span>
-  <span id="zoom-config">
-    <label for="zoom-speed">Zoom</label>
-    <input id="zoom-speed" type="number" min="0.1" step="0.1" value="0.5" placeholder="×1.0" />
-  </span>
-        <input id="file" type="file" accept=".glb" />
-      </div>
-      <div id="info-panel">
-        <h4>Selection</h4>
-        <div class="row"><span class="key">Name</span><span class="val" id="sel-name">-</span></div>
-        <div class="row"><span class="key">Type</span><span class="val" id="sel-type">-</span></div>
-        <div class="row"><span class="key">Verts</span><span class="val" id="sel-verts">-</span></div>
-        <div class="row"><span class="key">Tris</span><span class="val" id="sel-tris">-</span></div>
-      </div>
-      <div id="stats-panel">
-        <div class="row"><span class="key">Meshes</span><span class="val" id="stat-meshes">0</span></div>
-        <div class="row"><span class="key">Batches</span><button class="val" id="stat-batches-btn" data-open="false">0</button></div>
-        <div class="row"><span class="key">Unbatched</span><span class="val" id="stat-unbatched">0</span></div>
-        <div class="row"><span class="key">Materials</span><span class="val" id="stat-materials">0</span></div>
-        <div class="row"><span class="key">Loaded in (s)</span><span class="val" id="stat-loadsec">N/A</span></div>
-        <div class="row"><span class="key">Edges added in (s)</span><span class="val" id="stat-edgessec">N/A</span></div>
-        <div id="batch-details"></div>
-      </div>
-      <div id="container"></div>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GLB Viewer (ThatOpen Components)</title>
+  <style nonce="dev">
+    html,
+    body,
+    #app {
+      height: 100%;
+      margin: 0;
+    }
+
+    #toolbar {
+      position: absolute;
+      z-index: 10;
+      top: 12px;
+      left: 12px;
+      background: rgba(30, 30, 30, 0.7);
+      padding: 8px 10px;
+      border-radius: 6px;
+    }
+
+    #container {
+      height: 100%;
+      width: 100%;
+    }
+
+    button {
+      color: #fff;
+      background: #6528D7;
+      border: 0;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #toolbar button[data-active="false"] {
+      background: #4a4a4a;
+      color: #ddd;
+    }
+
+    #toolbar button[data-active="true"] {
+      background: #6528D7;
+      color: #fff;
+    }
+
+    label {
+      color: #fff;
+      font: 12px sans-serif;
+      margin-left: 6px;
+    }
+
+    #cull-config {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #cull-input-wrap {
+      display: none;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #cull-threshold {
+      width: 50px;
+    }
+
+    #drag-config {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #drag-config input {
+      width: 72px;
+    }
+
+    #zoom-config {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #zoom-config input {
+      width: 72px;
+    }
+
+    #clip-config {
+      position: relative;
+      display: inline-block;
+    }
+
+    #clip-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: rgba(30, 30, 30, 0.95);
+      border-radius: 6px;
+      padding: 6px;
+      min-width: 120px;
+    }
+
+    #clip-menu button {
+      width: 100%;
+      text-align: left;
+      margin: 2px 0;
+    }
+
+    #info-panel {
+      position: absolute;
+      z-index: 10;
+      top: 12px;
+      right: 12px;
+      min-width: 260px;
+      max-width: 400px;
+      background: rgba(30, 30, 30, 0.7);
+      padding: 12px 14px;
+      border-radius: 6px;
+      color: #fff;
+      font: 14px/1.45 sans-serif;
+    }
+
+    #info-panel {
+      display: none;
+    }
+
+    #info-panel h4 {
+      margin: 0 0 8px 0;
+      font: 600 15px/1.2 system-ui, sans-serif;
+    }
+
+    #info-panel .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 2px 0;
+    }
+
+    #info-panel .key {
+      opacity: 0.8;
+    }
+
+    #info-panel .val {
+      text-align: right;
+    }
+
+    #stats-panel {
+      position: absolute;
+      z-index: 10;
+      left: 12px;
+      bottom: 12px;
+      min-width: 210px;
+      background: rgba(30, 30, 30, 0.7);
+      padding: 10px 12px;
+      border-radius: 6px;
+      color: #fff;
+      font: 14px/1.45 sans-serif;
+    }
+
+    #stats-panel .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 2px 0;
+    }
+
+    #batch-details {
+      display: none;
+      margin-top: 6px;
+      max-height: 200px;
+      overflow: auto;
+    }
+
+    #batch-details .bd-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 1px 0;
+    }
+
+    #edges-banner {
+      position: absolute;
+      z-index: 20;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30, 30, 30, 0.85);
+      color: #fff;
+      font: 14px/1.4 sans-serif;
+      padding: 6px 10px;
+      border-radius: 6px;
+      display: none;
+    }
+
+    #pick-banner {
+      display: none;
+    }
+
+    #toolbar #pick-banner {
+      display: none;
+      background: rgba(30, 30, 30, 0.85);
+      color: #fff;
+      font: 12px/1.3 sans-serif;
+      padding: 4px 8px;
+      border-radius: 6px;
+      margin-left: 8px;
+    }
+
+    #file {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <div id="edges-banner">Adding edges…</div>
+    <div id="pick-banner"></div>
+    <div id="toolbar">
+      <button id="open">Open .glb</button>
+      <button id="toggle-edges" data-active="false">Edges: Off</button>
+      <button id="toggle-adaptive" data-active="false">Adaptive Res: Off</button>
+      <button id="toggle-batching" data-active="true">Batching: On</button>
+      <span id="clip-config">
+        <button id="clip-btn" data-active="false">Clip</button>
+        <div id="clip-menu">
+          <button id="clip-x">X plane</button>
+          <button id="clip-y">Y plane</button>
+          <button id="clip-z">Z plane</button>
+        </div>
+      </span>
+      <span id="cull-config">
+        <button id="toggle-cull" data-active="true">Cull: On</button>
+        <span id="cull-input-wrap">
+          <label for="cull-threshold">Cull(px)</label>
+          <input id="cull-threshold" type="number" min="0" value="50" />
+        </span>
+      </span>
+      <span id="drag-config">
+        <label for="drag-smooth">Drag delay</label>
+        <input id="drag-smooth" type="number" min="0" step="0.01" value="0.05" placeholder="Max: 0.5" />
+      </span>
+      <span id="zoom-config">
+        <label for="zoom-speed">Zoom step</label>
+        <input id="zoom-speed" type="number" min="0.1" step="0.1" value="0.5" placeholder="×1.0" />
+      </span>
+      <input id="file" type="file" accept=".glb" />
     </div>
-    <script type="module" nonce="dev" src="/src/main.ts"></script>
-  </body>
+    <div id="info-panel">
+      <h4>Selection</h4>
+      <div class="row"><span class="key">Name</span><span class="val" id="sel-name">-</span></div>
+      <div class="row"><span class="key">Type</span><span class="val" id="sel-type">-</span></div>
+      <div class="row"><span class="key">Verts</span><span class="val" id="sel-verts">-</span></div>
+      <div class="row"><span class="key">Tris</span><span class="val" id="sel-tris">-</span></div>
+    </div>
+    <div id="stats-panel">
+      <div class="row"><span class="key">Meshes</span><span class="val" id="stat-meshes">0</span></div>
+      <div class="row"><span class="key">Batches</span><button class="val" id="stat-batches-btn"
+          data-open="false">0</button></div>
+      <div class="row"><span class="key">Unbatched</span><span class="val" id="stat-unbatched">0</span></div>
+      <div class="row"><span class="key">Materials</span><span class="val" id="stat-materials">0</span></div>
+      <div class="row"><span class="key">Loaded in (s)</span><span class="val" id="stat-loadsec">N/A</span></div>
+      <div class="row"><span class="key">Edges added in (s)</span><span class="val" id="stat-edgessec">N/A</span></div>
+      <div id="batch-details"></div>
+    </div>
+    <div id="container"></div>
+  </div>
+  <script type="module" nonce="dev" src="/src/main.ts"></script>
+</body>
+
 </html>

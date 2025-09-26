@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
+import { ClipperController } from '../clipping';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { batchMeshes, batchMeshesFromList, unbatch, type BatchingResult } from '../batching';
 import { AdaptiveResolutionController } from '../adaptiveRes';
@@ -45,6 +46,9 @@ export class Viewer {
   // RAF loop
   private rafId: number | null = null;
 
+  // Clipping
+  private clipperCtrl!: ClipperController;
+
   constructor(container: HTMLElement) {
     this.container = container;
 
@@ -57,6 +61,13 @@ export class Viewer {
 
     this.components.init();
     this.world.scene.setup();
+    // Default scene background
+    // Ensure local clipping is enabled for materials
+    this.renderer.localClippingEnabled = true;
+
+    // Enable raycasting for this world so Clipper can pick intersections
+    const raycasters = this.components.get(OBC.Raycasters);
+    raycasters.get(this.world);
     // Track edges toggle state on scene for other controllers
     (this.world.scene.three as any).userData = (this.world.scene.three as any).userData || {};
     (this.world.scene.three as any).userData.edgesEnabled = this.edgesEnabled;
@@ -82,6 +93,9 @@ export class Viewer {
     window.addEventListener('wheel', this.onWheel, { passive: true });
     window.addEventListener('resize', this.onResize, { passive: true });
 
+    // Clipper controller
+    this.clipperCtrl = new ClipperController(this.components, this.world);
+
     // Start incremental update loop
     this.rafId = requestAnimationFrame(this.animationLoop);
   }
@@ -99,6 +113,8 @@ export class Viewer {
     this.selection.detach();
     this.adaptiveRes.dispose();
     this.cullingCtrl.dispose();
+    // Dispose clipping planes and related resources
+    if (this.clipperCtrl) this.clipperCtrl.dispose();
     this.clearPreviousModel();
   }
 
@@ -128,6 +144,9 @@ export class Viewer {
       // Reset adaptive/culling defaults as in original behavior
       this.adaptiveRes.resetToDefaults();
       this.cullingCtrl.setThreshold(50);
+
+      // Scale clip plane size to model bounds for visibility
+      this.clipperCtrl.scaleSizeToUserModels(this.scene);
 
       if (this.edgesEnabled) this.addEdgesForCurrentModel();
       this.fitCameraToObject(root);
@@ -278,6 +297,8 @@ export class Viewer {
 
   private animationLoop = () => {
     this.cullingCtrl.update();
+    // Ensure renderer updates each frame; needed for postprocessing & overlays
+    (this.world.renderer as any).update?.();
     this.rafId = requestAnimationFrame(this.animationLoop);
   };
 
@@ -420,6 +441,72 @@ export class Viewer {
     const ev = new CustomEvent('viewer:edgesBuilt', { detail: { ms: this.firstEdgesBuildMs } });
     window.dispatchEvent(ev);
   }
+
+  // Clipping API
+  async createClipPlane(): Promise<boolean> {
+    // Create a plane immediately at model center facing up (no picking required)
+    try {
+      // Clear existing to ensure one visible plane
+      this.clipperCtrl.deleteAll();
+      // Compute center from current user model(s)
+      const box = new THREE.Box3();
+      let hasAny = false;
+      this.scene.traverse(o => {
+        const m = o as THREE.Mesh;
+        if ((m as any).isMesh && (m as any).userData?.isUserModel) {
+          box.expandByObject(m);
+          hasAny = true;
+        }
+      });
+      const center = hasAny ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, 0, 0);
+      const normal = new THREE.Vector3(0, 1, 0);
+      this.clipperCtrl.createAt(normal, center);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  createClipPlaneAxis(axis: 'x' | 'y' | 'z'): boolean {
+    try {
+      this.clipperCtrl.deleteAll();
+      const box = new THREE.Box3();
+      let hasAny = false;
+      this.scene.traverse(o => {
+        const m = o as THREE.Mesh;
+        if ((m as any).isMesh && (m as any).userData?.isUserModel) {
+          box.expandByObject(m);
+          hasAny = true;
+        }
+      });
+      const center = hasAny ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, 0, 0);
+      const normal = axis === 'x' ? new THREE.Vector3(1, 0, 0)
+        : axis === 'y' ? new THREE.Vector3(0, 1, 0)
+          : new THREE.Vector3(0, 0, 1);
+      this.clipperCtrl.createAt(normal, center);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async deleteClipPlane(_id?: string): Promise<void> { this.clipperCtrl.deleteAll(); }
+
+  deleteAllClipPlanes(): void { this.clipperCtrl.deleteAll(); }
+
+  createClipPlaneAt(normal: THREE.Vector3, point: THREE.Vector3): string { return this.clipperCtrl.createAt(normal, point); }
+
+  setClipVisible(visible: boolean): void { this.clipperCtrl.setVisible(visible); }
+
+  isClipVisible(): boolean { return this.clipperCtrl.isVisible(); }
+
+  // Optional viewer-level subscriptions for Clipper events
+  onClipAfterCreate(_handler: (plane: OBC.SimplePlane) => void) { }
+  onClipAfterDelete(_handler: (plane: OBC.SimplePlane) => void) { }
+  onClipAfterCancel(_handler: () => void) { }
+  onClipAfterDrag(_handler: () => void) { }
+
+  setSelectionEnabled(state: boolean) { this.selection.setEnabled(state); }
 }
 
 

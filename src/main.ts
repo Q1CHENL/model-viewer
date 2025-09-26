@@ -1,4 +1,6 @@
 import { Viewer } from './viewer/Viewer';
+import { installClippingUI } from './clipping';
+import { installEdgesUI } from './edges';
 
 const container = document.getElementById('container')!;
 const viewer = new Viewer(container);
@@ -53,26 +55,7 @@ document.getElementById('file')!.addEventListener('change', async (e) => {
 });
 
 // Edges toggle button logic
-const edgesToggleBtn = document.getElementById('toggle-edges');
-if (edgesToggleBtn) {
-  edgesToggleBtn.addEventListener('click', () => {
-    const next = !viewer.isEdgesEnabled();
-    edgesToggleBtn.setAttribute('data-active', next ? 'true' : 'false');
-    edgesToggleBtn.textContent = `Edges: ${next ? 'On' : 'Off'}`;
-    if (next) {
-      // Show banner only if edges haven't been built for the current model
-      if (!viewer.hasBuiltEdges() && edgesBanner) edgesBanner.style.display = 'block';
-      // Defer heavy build to allow the banner to paint first
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          viewer.setEdgesEnabled(true);
-        });
-      });
-    } else {
-      viewer.setEdgesEnabled(false);
-    }
-  });
-}
+installEdgesUI(viewer);
 
 // Batching toggle button logic
 const batchingBtn = document.getElementById('toggle-batching');
@@ -152,6 +135,9 @@ if (adaptiveBtn) {
     updateStats();
   });
 }
+
+// Clipping controls
+installClippingUI(viewer);
 
 updateStats();
 

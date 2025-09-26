@@ -20,6 +20,8 @@ export class SelectionController {
   private selectionBaseGeomUuid: string | null = null;
   private selectionEdgeOverlay: THREE.LineSegments | null = null;
 
+  private enabled = true;
+
   private pickInfoPanel = document.getElementById('info-panel') as HTMLElement | null;
   private selNameEl = document.getElementById('sel-name') as HTMLElement | null;
   private selTypeEl = document.getElementById('sel-type') as HTMLElement | null;
@@ -33,6 +35,7 @@ export class SelectionController {
   private pendingPickRaf: number | null = null;
 
   private clickHandler = (e: MouseEvent) => {
+    if (!this.enabled) return;
     const t0 = performance.now();
     if (this.pendingPickRaf !== null) {
       cancelAnimationFrame(this.pendingPickRaf);
@@ -57,11 +60,13 @@ export class SelectionController {
   };
 
   private pointerDownHandler = (e: PointerEvent | MouseEvent) => {
+    if (!this.enabled) return;
     this.lastDownPos = { x: e.clientX, y: e.clientY };
     this.isDrag = false;
   };
 
   private pointerMoveHandler = (e: PointerEvent | MouseEvent) => {
+    if (!this.enabled) return;
     if (!this.lastDownPos) return;
     const dx = e.clientX - this.lastDownPos.x;
     const dy = e.clientY - this.lastDownPos.y;
@@ -71,6 +76,7 @@ export class SelectionController {
   };
 
   private pointerUpHandler = (_e: PointerEvent | MouseEvent) => {
+    if (!this.enabled) return;
     // Keep state; click will decide whether to pick
   };
 
@@ -80,6 +86,14 @@ export class SelectionController {
     this.selectionColor = params.selectionColor ?? 0x00D5B9;
     // React to global edges toggle to rebuild selection outline if needed
     window.addEventListener('viewer:edgesToggled', this.handleEdgesToggle as any);
+  }
+
+  setEnabled(state: boolean) {
+    this.enabled = state;
+    if (!state) {
+      this.clearSelectionOverlay();
+      this.updateInfoPanel(null);
+    }
   }
 
   attach() {
@@ -296,12 +310,9 @@ export class SelectionController {
   private showPickTiming(ms: number) {
     const el = document.getElementById('pick-banner') as HTMLElement | null;
     if (!el) return;
-    el.textContent = `Picked in : ${ms.toFixed(1)} ms`;
-    el.style.display = 'block';
-    // Hide after a short delay
-    // window.clearTimeout((el as any)._pickTimer);
-    // (el as any)._pickTimer = window.setTimeout(() => {
-    //   el.style.display = 'none';
-    // }, 500);
+    el.textContent = `Picked in: ${ms.toFixed(1)} ms`;
+    const toolbar = document.getElementById('toolbar') as HTMLElement | null;
+    if (toolbar && !toolbar.contains(el)) toolbar.appendChild(el);
+    el.style.display = 'inline-block';
   }
 }
