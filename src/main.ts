@@ -137,6 +137,21 @@ if (cullToggle && cullWrap) {
   });
 }
 
+// Occlusion culling toggle
+const occlusionCullToggle = document.getElementById('toggle-occlusion-cull');
+if (occlusionCullToggle) {
+  const setOcclusionCullUi = (enabled: boolean) => {
+    occlusionCullToggle.setAttribute('data-active', enabled ? 'true' : 'false');
+    occlusionCullToggle.textContent = `Occlusion: ${enabled ? 'On' : 'Off'}`;
+    viewer.setOcclusionCullingEnabled(enabled);
+  };
+  setOcclusionCullUi(false);
+  occlusionCullToggle.addEventListener('click', () => {
+    setOcclusionCullUi(!viewer.isOcclusionCullingEnabled());
+    updateStats();
+  });
+}
+
 // Bind threshold input (default 50)
 if (thresholdInput) {
   const applyThreshold = () => {

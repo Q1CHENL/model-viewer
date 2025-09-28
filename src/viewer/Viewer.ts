@@ -4,7 +4,7 @@ import { ClipperController } from '../clipping';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { batchMeshes, batchMeshesFromList, unbatch, type BatchingResult } from '../batching';
 import { AdaptiveResolutionController } from '../adaptiveRes';
-import { InteractionCullingController } from '../culling';
+import { InteractionCullingController, OcclusionCullingController } from '../culling';
 import { SelectionController } from '../selection';
 import { HighlightController } from '../highlight';
 
@@ -31,6 +31,7 @@ export class Viewer {
   private selection: SelectionController;
   private adaptiveRes: AdaptiveResolutionController;
   private cullingCtrl: InteractionCullingController;
+  private occlusionCullingCtrl: OcclusionCullingController;
   private highlightCtrl: HighlightController;
 
   // Edges overlay state
@@ -87,6 +88,7 @@ export class Viewer {
     // Controllers
     this.adaptiveRes = new AdaptiveResolutionController(this.world.renderer);
     this.cullingCtrl = new InteractionCullingController(this.world.camera, this.world.renderer);
+    this.occlusionCullingCtrl = new OcclusionCullingController(this.world.camera, this.world.scene.three as THREE.Scene);
     this.selection = new SelectionController({ world: { camera: this.world.camera, renderer: this.world.renderer }, scene: this.world.scene.three as unknown as THREE.Scene, selectionColor: 0x00D5B9 });
     this.selection.attach();
     this.highlightCtrl = new HighlightController(
@@ -152,6 +154,7 @@ export class Viewer {
         }) || null;
       }
       this.cullingCtrl.register(root);
+      this.occlusionCullingCtrl.register(root);
 
       // Reset adaptive/culling defaults as in original behavior
       this.adaptiveRes.resetToDefaults();
@@ -279,9 +282,11 @@ export class Viewer {
 
     // Re-register culling reflecting visibility/merged state
     this.cullingCtrl.clear();
+    this.occlusionCullingCtrl.clear();
     const userRoot = new THREE.Group();
     this.scene.traverse(o => { if ((o as any).userData?.isUserModel) userRoot.add(o); });
     this.cullingCtrl.register(userRoot);
+    this.occlusionCullingCtrl.register(userRoot);
 
     // Re-apply text highlighting if it was active
     if (wasTextActive && searchText) {
@@ -299,6 +304,13 @@ export class Viewer {
   isCullingEnabled() { return (this.cullingCtrl as any).enabled === true; }
 
   setCullingThreshold(px: number) { this.cullingCtrl.setThreshold(px); }
+
+  setOcclusionCullingEnabled(enabled: boolean) {
+    this.occlusionCullingCtrl.enabled = enabled;
+    if (!enabled) this.occlusionCullingCtrl.onInteractionEndVisibilityRestore();
+  }
+
+  isOcclusionCullingEnabled() { return this.occlusionCullingCtrl.enabled; }
 
   setAdaptiveEnabled(enabled: boolean) { this.adaptiveRes.setEnabled(enabled); }
 
@@ -328,6 +340,7 @@ export class Viewer {
 
   private animationLoop = () => {
     this.cullingCtrl.update();
+    this.occlusionCullingCtrl.update();
     // Ensure renderer updates each frame; needed for postprocessing & overlays
     (this.world.renderer as any).update?.();
     this.rafId = requestAnimationFrame(this.animationLoop);
@@ -368,6 +381,7 @@ export class Viewer {
     this.firstEdgesBuildMs = null;
     this.selection.clear();
     this.cullingCtrl.clear();
+    this.occlusionCullingCtrl.clear();
   }
 
   private fitCameraToObject(object: THREE.Object3D) {
