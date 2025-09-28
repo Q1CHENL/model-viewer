@@ -240,6 +240,14 @@ export class SelectionController {
   }
 
   private findOriginalFromMergedIntersection(mergedMesh: THREE.Mesh, faceIndex: number | null) {
+    // Fast O(1) lookup using pre-computed face-to-original mapping
+    const faceToOriginal = (mergedMesh as any).userData?.faceToOriginal as THREE.Mesh[] | undefined;
+    if (faceToOriginal && faceIndex != null) {
+      const original = faceToOriginal[faceIndex];
+      if (original) return original;
+    }
+    
+    // Fallback to O(n) search if lookup array is not available (for backward compatibility)
     const ranges = (mergedMesh as any).userData?.mergedRanges as { start: number; count: number; original: THREE.Mesh }[] | undefined;
     if (!ranges || faceIndex == null) return mergedMesh;
     const indexOffset = faceIndex * 3;
