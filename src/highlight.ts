@@ -254,7 +254,7 @@ export function installHighlightUI(
   const resetHighlightUI = () => {
     highlightButton.setAttribute('data-active', 'false');
     highlightButton.textContent = 'Highlight';
-    searchInput.style.display = 'none';
+    searchInput.classList.add('hidden');
   };
   
   // Listen for model load events to reset UI
@@ -265,7 +265,7 @@ export function installHighlightUI(
     
     if (!isActive) {
       // Show input when enabling
-      searchInput.style.display = 'inline-block';
+      searchInput.classList.remove('hidden');
       searchInput.focus();
       const searchText = searchInput.value.trim();
       if (searchText) {
@@ -278,7 +278,7 @@ export function installHighlightUI(
       highlightController.highlightTextMeshes(false, '');
       highlightButton.setAttribute('data-active', 'false');
       highlightButton.textContent = 'Highlight';
-      searchInput.style.display = 'none';
+      searchInput.classList.add('hidden');
     }
   };
 

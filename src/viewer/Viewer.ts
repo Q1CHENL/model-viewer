@@ -44,7 +44,7 @@ export class Viewer {
   // Batching
   private batchingEnabled = true;
   private currentBatching: BatchingResult | null = null;
-  private maxVerticesPerBatch = 2000;
+  private maxVerticesPerBatch = 20000;
 
   // RAF loop
   private rafId: number | null = null;

@@ -69,6 +69,16 @@
       width: 50px;
     }
 
+    #batch-input-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #batch-vertices {
+      width: 60px;
+    }
+
     #drag-config {
       display: inline-flex;
       align-items: center;
@@ -107,6 +117,10 @@
 
     #search-text::placeholder {
       color: #aaa;
+    }
+
+    #search-text.hidden {
+      display: none;
     }
 
     #clip-config {
@@ -246,9 +260,13 @@
       <button id="toggle-edges" data-active="false">Edges: Off</button>
       <button id="toggle-adaptive" data-active="false">Adaptive Res: Off</button>
       <button id="toggle-batching" data-active="true">Batching: On</button>
+      <span id="batch-input-wrap">
+        <label for="batch-vertices">Max. verts</label>
+        <input id="batch-vertices" type="number" min="100" max="100000" value="20000" step="100" />
+      </span>
       <span id="highlight-config">
         <button id="highlight-search" data-active="false">Highlight names</button>
-        <input id="search-text" type="text" placeholder="Search text..." value="00" style="display: none;" />
+        <input id="search-text" type="text" placeholder="Search text..." value="00" class="hidden" />
       </span>
       <span id="clip-config">
         <button id="clip-btn" data-active="false">Clip</button>

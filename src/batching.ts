@@ -28,7 +28,7 @@ export interface BatchOptions {
 }
 
 const DEFAULT_OPTS: Required<BatchOptions> = {
-  maxVerticesPerBatch: 2000,
+  maxVerticesPerBatch: 20000,
   allow32Bit: true,
   minDiagonalForBatch: 0.5
 };
