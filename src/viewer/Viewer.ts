@@ -40,6 +40,11 @@ export class Viewer {
   private static readonly EDGE_THRESHOLD_ANGLE_MERGED = 25;
   private edgesCache = new Map<string, THREE.EdgesGeometry>();
   private firstEdgesBuildMs: number | null = null;
+  
+  // Async edge building state
+  private edgeBuildingInProgress = false;
+  private edgeBuildingCancelled = false;
+  private static readonly MESHES_PER_FRAME = 5; // Process up to 5 meshes per frame
 
   // Batching
   private batchingEnabled = true;
@@ -225,13 +230,20 @@ export class Viewer {
       const needMeasure = this.firstEdgesBuildMs === null;
       let t0 = 0;
       if (needMeasure) t0 = performance.now();
-      this.addEdgesForCurrentModel();
-      this.setEdgeOverlaysVisible(true);
-      if (needMeasure) {
-        this.firstEdgesBuildMs = Math.max(0, performance.now() - t0);
-        this.emitEdgesBuildTime();
-      }
+      
+      // Use async edge building to avoid blocking the main thread
+      this.addEdgesForCurrentModelAsync().then(() => {
+        this.setEdgeOverlaysVisible(true);
+        if (needMeasure && this.edgesEnabled) { // Check if still enabled after async operation
+          this.firstEdgesBuildMs = Math.max(0, performance.now() - t0);
+          this.emitEdgesBuildTime();
+        }
+      }).catch(error => {
+        console.warn('Edge building failed:', error);
+      });
     } else {
+      // Cancel any ongoing edge building
+      this.edgeBuildingCancelled = true;
       // Hide overlays but keep them and keep geometry cache for instant re-enable
       this.setEdgeOverlaysVisible(false);
     }
@@ -410,6 +422,7 @@ export class Viewer {
   }
 
   private addEdgesForCurrentModel() {
+    // Legacy synchronous method - kept for compatibility
     const mergedMeshes: THREE.Mesh[] = [];
     const smallMeshes: THREE.Mesh[] = [];
     this.scene.traverse(obj => {
@@ -444,6 +457,73 @@ export class Viewer {
       (lines as any).userData.isMergedEdgeOverlay = true;
       (lines as any).renderOrder = 1;
       mesh.add(lines);
+    }
+  }
+
+  private async addEdgesForCurrentModelAsync(): Promise<void> {
+    if (this.edgeBuildingInProgress) {
+      // Cancel any existing edge building
+      this.edgeBuildingCancelled = true;
+      // Wait a frame to let the previous operation finish
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+
+    this.edgeBuildingInProgress = true;
+    this.edgeBuildingCancelled = false;
+
+    const mergedMeshes: THREE.Mesh[] = [];
+    const smallMeshes: THREE.Mesh[] = [];
+    this.scene.traverse(obj => {
+      const m = obj as THREE.Mesh;
+      if (!(m as any).isMesh) return;
+      if (!(m as any).userData?.isUserModel) return;
+      if ((m as any).userData.isMergedBatch) mergedMeshes.push(m);
+      else smallMeshes.push(m);
+    });
+
+    // Process small meshes in chunks
+    await this.processEdgesInChunks(smallMeshes, false);
+    
+    // If not cancelled, process merged meshes
+    if (!this.edgeBuildingCancelled && this.edgesEnabled) {
+      await this.processEdgesInChunks(mergedMeshes, true);
+    }
+
+    this.edgeBuildingInProgress = false;
+  }
+
+  private async processEdgesInChunks(meshes: THREE.Mesh[], isMerged: boolean): Promise<void> {
+    for (let i = 0; i < meshes.length && !this.edgeBuildingCancelled && this.edgesEnabled; i += Viewer.MESHES_PER_FRAME) {
+      const chunk = meshes.slice(i, i + Viewer.MESHES_PER_FRAME);
+      
+      for (const mesh of chunk) {
+        if (this.edgeBuildingCancelled || !this.edgesEnabled) return;
+        
+        if (!mesh.geometry) continue;
+        
+        const hasEdges = isMerged 
+          ? mesh.children.some(c => (c as any).userData?.isMergedEdgeOverlay)
+          : mesh.children.some(c => (c as any).userData?.isEdgeOverlay);
+        
+        if (hasEdges) continue;
+        
+        const threshold = isMerged ? Viewer.EDGE_THRESHOLD_ANGLE_MERGED : Viewer.EDGE_THRESHOLD_ANGLE_DETAILED;
+        const egeom = this.getOrCreateEdgesGeometry(mesh.geometry as THREE.BufferGeometry, threshold);
+        const lines = new THREE.LineSegments(egeom, this.edgesMaterial.clone());
+        
+        (lines as any).userData.isUserModel = true;
+        (lines as any).userData.isEdgeOverlay = true;
+        if (isMerged) {
+          (lines as any).userData.isMergedEdgeOverlay = true;
+        }
+        (lines as any).renderOrder = 1;
+        mesh.add(lines);
+      }
+      
+      // Yield control to the browser after processing this chunk
+      if (i + Viewer.MESHES_PER_FRAME < meshes.length) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      }
     }
   }
 
@@ -599,7 +679,12 @@ export class Viewer {
       // Rebuild edges if enabled
       if (this.edgesEnabled) {
         this.removeAllEdgeOverlays();
-        this.addEdgesForCurrentModel();
+        // Use async version to avoid blocking during batching rebuild
+        this.addEdgesForCurrentModelAsync().then(() => {
+          this.setEdgeOverlaysVisible(true);
+        }).catch(error => {
+          console.warn('Edge rebuilding after batching failed:', error);
+        });
       }
 
       // Refresh highlighting if active
