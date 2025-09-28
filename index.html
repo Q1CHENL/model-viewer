@@ -41,7 +41,7 @@
 
     button {
       color: #ffffff;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #736cc7;
       border: 0;
       padding: 10px 16px;
       border-radius: 8px;
@@ -78,7 +78,7 @@
     }
 
     #toolbar button[data-active="true"] {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #736cc7;
       color: #ffffff;
       box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4);
     }
@@ -249,6 +249,7 @@
         opacity: 0;
         transform: translateY(-8px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
@@ -266,7 +267,7 @@
     }
 
     #clip-menu button:hover {
-      background: rgba(102, 126, 234, 0.8);
+      background: #736cc7;
       transform: none;
     }
 
@@ -371,7 +372,7 @@
     }
 
     #stats-panel button.val {
-      background: rgba(102, 126, 234, 0.2);
+      background: #736cc7;
       border: 1px solid rgba(102, 126, 234, 0.3);
       color: #a5b4fc;
       padding: 4px 8px;
@@ -425,7 +426,7 @@
       top: 16px;
       left: 50%;
       transform: translateX(-50%);
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.9) 0%, rgba(5, 150, 105, 0.9) 100%);
+      background: #736cc7;
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       color: #ffffff;
@@ -443,6 +444,7 @@
         opacity: 0;
         transform: translateX(-50%) translateY(-10px);
       }
+
       to {
         opacity: 1;
         transform: translateX(-50%) translateY(0);
@@ -455,7 +457,7 @@
 
     #toolbar #pick-banner {
       display: none;
-      background: rgba(59, 130, 246, 0.9);
+      background: #736cc7;
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       color: #ffffff;
@@ -487,8 +489,8 @@
         <input id="batch-vertices" type="number" min="100" max="100000" value="20000" step="100" />
       </span>
       <span id="highlight-config">
-        <button id="highlight-search" data-active="false">Highlight names</button>
-        <input id="search-text" type="text" placeholder="Search text..." value="00" class="hidden" />
+        <button id="highlight-search" data-active="false">Highlight</button>
+        <input id="search-text" type="text" placeholder="Search text..." value="ab" class="hidden" />
       </span>
       <span id="clip-config">
         <button id="clip-btn" data-active="false">Clip</button>
