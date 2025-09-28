@@ -272,11 +272,23 @@ function doBatch(collected: MeshInfo[], options: Required<BatchOptions>, parent:
       mergedGeom.setIndex(new THREE.BufferAttribute(indexArr, 1));
       mergedGeom.computeBoundingSphere();
 
+      // Create O(1) face-to-original lookup array
+      const totalFaces = Math.floor(totalIndices / 3);
+      const faceToOriginal = new Array<THREE.Mesh>(totalFaces);
+      for (const rangeMeta of batchRanges) {
+        const startFace = Math.floor(rangeMeta.start / 3);
+        const faceCount = Math.floor(rangeMeta.count / 3);
+        for (let i = 0; i < faceCount; i++) {
+          faceToOriginal[startFace + i] = rangeMeta.original;
+        }
+      }
+
       const material = batchInfos[0].material; // shared
       const mergedMesh = new THREE.Mesh(mergedGeom, material);
       (mergedMesh as any).userData.isUserModel = true;
       (mergedMesh as any).userData.isMergedBatch = true;
       (mergedMesh as any).userData.mergedRanges = batchRanges;
+      (mergedMesh as any).userData.faceToOriginal = faceToOriginal;
       parent.add(mergedMesh);
       mergedMeshes.push(mergedMesh);
       batchInfos = [];
