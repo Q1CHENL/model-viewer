@@ -22,6 +22,24 @@ export function installEdgesUI(viewer: Viewer) {
     }
   });
 
+  // Listen for edge building start
+  window.addEventListener('viewer:edgeStart', (e: any) => {
+    if (edgesBanner) {
+      const { totalMeshes } = e.detail;
+      edgesBanner.innerHTML = `Adding edges… (${totalMeshes} meshes)`;
+      edgesBanner.style.display = 'block';
+    }
+  });
+
+  // Listen for edge building progress
+  window.addEventListener('viewer:edgeProgress', (e: any) => {
+    if (edgesBanner) {
+      const { meshId, meshName, meshType, currentIndex, totalMeshes } = e.detail;
+      edgesBanner.innerHTML = `Adding edges… (${currentIndex}/${totalMeshes})<br/>
+        <small>Processing ${meshType} mesh: <strong>${meshName}</strong> (ID: ${meshId})</small>`;
+    }
+  });
+
   window.addEventListener('viewer:edgesBuilt', (e: any) => {
     const ms = e?.detail?.ms as number | undefined;
     if (typeof ms === 'number' && edgesSecEl) edgesSecEl.textContent = (ms / 1000).toFixed(2);
