@@ -481,11 +481,17 @@ export class Viewer {
       else smallMeshes.push(m);
     });
 
+    // Emit start event
+    const totalMeshes = smallMeshes.length + mergedMeshes.length;
+    window.dispatchEvent(new CustomEvent('viewer:edgeStart', {
+      detail: { totalMeshes, smallMeshes: smallMeshes.length, mergedMeshes: mergedMeshes.length }
+    }));
+
     // Process small meshes in chunks
     await this.processEdgesInChunks(smallMeshes, false);
     
     // If not cancelled, process merged meshes
-    if (!this.edgeBuildingCancelled && this.edgesEnabled) {
+    if (!this.edgeBuildingCancelled && this.edgesEnabled && mergedMeshes.length > 0) {
       await this.processEdgesInChunks(mergedMeshes, true);
     }
 
@@ -506,6 +512,24 @@ export class Viewer {
           : mesh.children.some(c => (c as any).userData?.isEdgeOverlay);
         
         if (hasEdges) continue;
+        
+        // Emit progress event with mesh information
+        const meshId = mesh.id;
+        const meshName = mesh.name || `Mesh_${meshId}`;
+        const currentIndex = i + chunk.indexOf(mesh) + 1;
+        const totalMeshes = meshes.length;
+        const meshType = isMerged ? 'merged' : 'individual';
+        
+        window.dispatchEvent(new CustomEvent('viewer:edgeProgress', {
+          detail: {
+            meshId,
+            meshName,
+            meshType,
+            currentIndex,
+            totalMeshes,
+            progress: (currentIndex / totalMeshes) * 100
+          }
+        }));
         
         const threshold = isMerged ? Viewer.EDGE_THRESHOLD_ANGLE_MERGED : Viewer.EDGE_THRESHOLD_ANGLE_DETAILED;
         const egeom = this.getOrCreateEdgesGeometry(mesh.geometry as THREE.BufferGeometry, threshold);
